@@ -271,7 +271,8 @@ async def voice_message_handler(update: Update, context: ContextTypes.DEFAULT_TY
             # Ошибка распознавания - показываем полное сообщение об ошибке
             await processing_message.edit_text(recognized_text)
             return
-        else:
+
+
             await processing_message.edit_text(f"🎤 Распознанный текст: \"{recognized_text}\"")
         
         # Анализируем голосовую команду
@@ -376,6 +377,9 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 `conda install ffmpeg -c conda-forge`
 
 📝 ПРИМЕРЫ РЕДАКТИРОВАНИЯ:
+
+
+
 • /edit заказ номер #2 вместо двух котлов взял один
 • /edit изменить количество товара 'котлы' в заказе 5 с 3 на 1
 • /edit обновить цену товара в заказе 1 на 50000
