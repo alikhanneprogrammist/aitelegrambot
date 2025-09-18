@@ -1429,6 +1429,9 @@ def main():
     app.add_handler(CommandHandler("refresh", command_handler.refresh_command))
     app.add_handler(CommandHandler("ask", command_handler.ask_command))
     app.add_handler(CommandHandler("help", command_handler.help_command))
+    app.add_handler(CommandHandler("employees", command_handler.list_employees_command))
+    app.add_handler(CommandHandler("rename", command_handler.rename_employee_command))
+    app.add_handler(CommandHandler("confirm_rename", command_handler.confirm_rename_command))
     app.add_handler(CommandHandler("hide", hide_keyboard_handler))
     app.add_handler(CommandHandler("show", show_keyboard_handler))
     

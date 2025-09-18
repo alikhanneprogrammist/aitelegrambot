@@ -10,6 +10,7 @@ from sales_folder.chatgpt_analyzer import ChatGPTAnalyzer
 from salary_folder.salary_update import update_salary, get_salary_summary
 from utils import data_cache, get_gross_profit, get_net_profit, get_net_profit_from_sales, get_office_expenses_total, get_office_summary, add_office_constants
 from config import FILE_PATHS, TELEGRAM_SETTINGS
+from employee_rename_manager import EmployeeRenameManager
 
 logger = logging.getLogger(__name__)
 
@@ -205,6 +206,9 @@ class CommandHandler:
 • /edit - редактировать данные в Excel (AI)
 • /refresh - обновить данные из Excel
 • /ask - быстрый вопрос о данных
+• /employees - показать всех сотрудников
+• /rename - переименовать сотрудника
+• /confirm_rename - подтвердить переименование
 • /help - эта справка
 
 🔧 НАСТРОЙКИ:
@@ -242,6 +246,12 @@ class CommandHandler:
 • /edit изменить количество товара 'котлы' в заказе 5 с 3 на 1
 • /edit обновить цену товара в заказе 1 на 50000
 • /edit назначить менеджером Иван в заказе 3
+
+👥 ПЕРЕИМЕНОВАНИЕ СОТРУДНИКОВ:
+• /employees - посмотреть всех сотрудников
+• /rename Иван Иван Петров - переименовать сотрудника
+• /confirm_rename Иван Иван Петров - подтвердить переименование
+• python employee_rename_manager.py "Иван" "Иван Петров" - через терминал
         """
         await update.message.reply_text(help_text)
     
@@ -255,3 +265,130 @@ class CommandHandler:
             parts.append(text[i:i + max_length])
         
         return parts
+    
+    async def list_employees_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Обработчик команды /employees - показать всех сотрудников"""
+        try:
+            manager = EmployeeRenameManager()
+            employees = manager.get_all_employee_names()
+            
+            message = "👥 **Список всех сотрудников:**\n\n"
+            
+            for file_name, sheets in employees.items():
+                message += f"📄 **{file_name}:**\n"
+                for sheet_name, names in sheets.items():
+                    if names:
+                        message += f"  📋 {sheet_name}: {', '.join(names)}\n"
+                    else:
+                        message += f"  📋 {sheet_name}: (пусто)\n"
+                message += "\n"
+            
+            await update.message.reply_text(message)
+            
+        except Exception as e:
+            logger.error(f"Ошибка получения списка сотрудников: {e}")
+            await update.message.reply_text(f"❌ Ошибка получения списка сотрудников: {str(e)}")
+    
+    async def rename_employee_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Обработчик команды /rename - переименовать сотрудника"""
+        try:
+            # Получаем аргументы команды
+            if not context.args or len(context.args) < 2:
+                await update.message.reply_text(
+                    "❌ **Неверный формат команды!**\n\n"
+                    "Использование: `/rename <старое_имя> <новое_имя>`\n"
+                    "Пример: `/rename Иван Иван Петров`\n\n"
+                    "💡 Сначала посмотрите список сотрудников: `/employees`"
+                )
+                return
+            
+            old_name = context.args[0]
+            new_name = " ".join(context.args[1:])  # Объединяем все слова после первого
+            
+            manager = EmployeeRenameManager()
+            
+            # Валидация
+            is_valid, error_msg = manager.validate_rename(old_name, new_name)
+            if not is_valid:
+                await update.message.reply_text(f"❌ **Ошибка валидации:** {error_msg}")
+                return
+            
+            # Предварительный просмотр
+            preview = manager.get_rename_preview(old_name, new_name)
+            
+            message = f"📋 **Предварительный просмотр переименования:**\n"
+            message += f"`{old_name}` → `{new_name}`\n\n"
+            
+            total_changes = 0
+            for file_name, sheets in preview.items():
+                file_changes = 0
+                for sheet_name, count in sheets.items():
+                    if count > 0:
+                        file_changes += count
+                        total_changes += count
+                
+                if file_changes > 0:
+                    message += f"📄 **{file_name}:** {file_changes} изменений\n"
+            
+            if total_changes == 0:
+                await update.message.reply_text("ℹ️ Изменений не найдено")
+                return
+            
+            message += f"\n❓ **Выполнить переименование?**\n"
+            message += f"Используйте: `/confirm_rename {old_name} {new_name}`"
+            
+            await update.message.reply_text(message)
+            
+        except Exception as e:
+            logger.error(f"Ошибка команды переименования: {e}")
+            await update.message.reply_text(f"❌ Ошибка: {str(e)}")
+    
+    async def confirm_rename_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Обработчик команды /confirm_rename - подтвердить переименование"""
+        try:
+            if not context.args or len(context.args) < 2:
+                await update.message.reply_text(
+                    "❌ **Неверный формат команды!**\n\n"
+                    "Использование: `/confirm_rename <старое_имя> <новое_имя>`"
+                )
+                return
+            
+            old_name = context.args[0]
+            new_name = " ".join(context.args[1:])
+            
+            manager = EmployeeRenameManager()
+            
+            # Валидация
+            is_valid, error_msg = manager.validate_rename(old_name, new_name)
+            if not is_valid:
+                await update.message.reply_text(f"❌ **Ошибка валидации:** {error_msg}")
+                return
+            
+            # Выполняем переименование
+            await update.message.reply_text("🔄 **Выполняю переименование...**")
+            
+            results = manager.rename_employee(old_name, new_name, dry_run=False)
+            
+            # Формируем результат
+            message = f"✅ **Переименование завершено!**\n"
+            message += f"`{old_name}` → `{new_name}`\n\n"
+            
+            success_count = 0
+            for file_name, sheets in results.items():
+                file_success = False
+                for sheet_name, success in sheets.items():
+                    if success:
+                        file_success = True
+                        success_count += 1
+                
+                if file_success:
+                    message += f"📄 **{file_name}:** ✅ успешно\n"
+            
+            if success_count == 0:
+                message += "⚠️ Изменения не были внесены"
+            
+            await update.message.reply_text(message)
+            
+        except Exception as e:
+            logger.error(f"Ошибка подтверждения переименования: {e}")
+            await update.message.reply_text(f"❌ Ошибка: {str(e)}")
